@@ -1,0 +1,6 @@
+pycycstat is a Python package for cyclostationary signal processing.
+
+!! This package is still under active development.  It may contain
+   errors, some features may not yet be fully implemented, and some
+   may be removed in future releases.  You should not yet use this
+   package for real data analysis. !!
