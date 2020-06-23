@@ -268,7 +268,8 @@ def surfaceplot(x, y, z, alpha=0.8, facecolors=plt.cm.viridis_r,
     return fig,ax
 
 
-def plot_top_scf(fs, cfs, scf, n, magnitude=True, conjugate=False):
+def plot_top_scf(fs, cfs, scf, n, coherence=None, magnitude=True, 
+                 conjugate=False, show=False, figure=None, figsize=None):
     """
     Plot the spectral correlation or coherence function on 
     the frequency vs cycle frequency bi-plane for the top 
@@ -285,6 +286,9 @@ def plot_top_scf(fs, cfs, scf, n, magnitude=True, conjugate=False):
     n : int
        Plot the SCF at cycle frequencies corresponding to the 
        top 'n' SCF values.
+    coherence : {ndarray}
+       If the spectral coherence is explicitly specified, use this to 
+       find the top cycle frequencies, but still plot scf.
     magnitude : {bool}
        If True, use the absolute magnitude of the SCF; if False
        use the complex value.
@@ -293,10 +297,18 @@ def plot_top_scf(fs, cfs, scf, n, magnitude=True, conjugate=False):
        appropriate for the conjugate SCF.  If False, plot cycle
        frequencies on the interval [0,1] as appropriate for the
        non-conjugate SCF.
+    show : {bool}
+       If True, execute matplotlib.pyplot.show() and return None.  Otherwise,
+       return the Figure object.
+    fig : {matplotlib.figure}
+       If provided, add axes to an existing figure.  Otherwise, make a new one.
+    figsize : {tuple}
+       If provided, create a figure with the existing size.  If 'figure' is not
+       None, then the existing figure's size will be adjusted.
     
     Returns
     -------
-    None
+    matplotlib.pyplot.figure instance or None
 
     Notes
     -----
@@ -310,7 +322,15 @@ def plot_top_scf(fs, cfs, scf, n, magnitude=True, conjugate=False):
         fs = fs[idx0].reshape((fs.shape[0]-1,fs.shape[1]//2))
         cfs = cfs[idx0].reshape((cfs.shape[0]-1,cfs.shape[1]//2))
         scf = scf[idx0].reshape((scf.shape[0]-1,scf.shape[1]//2))
-    top_cfs = top_cycle_freqs(scf, cfs, n, magnitude=magnitude)
+        if coherence is not None:
+            coherence = coherence[idx0].reshape((coherence.shape[0]-1,
+                                                 coherence.shape[1]//2))
+        else: 
+            pass
+    if coherence is not None:
+        top_cfs = top_cycle_freqs(coherence, cfs, n, magnitude=magnitude)
+    else:
+        top_cfs = top_cycle_freqs(scf, cfs, n, magnitude=magnitude)
     verts = []
     for cf in top_cfs:
         fs_to_plot = fs[cfs == cf]
@@ -322,21 +342,31 @@ def plot_top_scf(fs, cfs, scf, n, magnitude=True, conjugate=False):
             [(fs_to_plot[0],0)] + \
             [xy for xy in zip(fs_to_plot,scfs_to_plot)] + \
             [(fs_to_plot[-1],0)])
-    fig = plt.figure()
-    ax = fig.gca(projection="3d")
+    if figure is None:
+        figure = plt.figure(figsize=figsize) if figsize is not None else plt.figure()
+        ax = figure.gca(projection="3d",proj_type="ortho")
+    else:
+        naxes = len(figure.axes)
+        ax=figure.add_subplot(
+            naxes+1,1,naxes+1,projection="3d",proj_type="ortho")
+        if figsize is not None: figure.set_size_inches(**figsize)
+        
     poly_collection = PolyCollection(verts,alpha=0.8,edgecolors="k",
                                      facecolors=plt.cm.viridis_r(top_cfs))
     ax.add_collection3d(poly_collection,zs=top_cfs,zdir="y")
-    ax.set_xlim(-0.5,0.5)
+    ax.set_xlim(fs.min(),fs.max())
     if conjugate:
-        ax.set_ylim(-1,1)
+        ax.set_ylim(cfs.max(),cfs.min())
     else:
-        ax.set_ylim(0,1)
-    ax.set_zlim(0,1.15*np.max(np.abs(scf)))
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Cycle Frequency (Hz)")
+        ax.set_ylim(cfs.max(),0)
+    ax.set_zlim(0,1.15*np.abs(scf).max())
+    ax.locator_params(nbins=5)
+    ax.set_xlabel("freq (Hz)")
+    ax.set_ylabel("cycle freq (Hz)")
     ax.set_zlabel("SCF (magnitude)")
-    ax.invert_yaxis()
-    plt.show()
-
-    return None
+    #ax.invert_yaxis()
+    if show:
+        plt.show()
+        return None
+    else:
+        return (figure,ax)
