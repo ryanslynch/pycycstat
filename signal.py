@@ -352,13 +352,10 @@ def ask_1bit(nbits,tbit,fc,Ebit,N0,fs=800e6,bias=0.71):
     signal.
     """
     x = np.arange(nbits*tbit)
-    print('Creating random bit sequence...')
     bit_seq = np.random.randint(0,2,size=(int(len(x)/T_bit)+1,))+bias
-    print('Creating symbol sequence from bits...')
     pulse = np.ones(T_bit)
     sym_seq = np.kron(bit_seq,pulse)[:len(x)]
 
-    print('Smoothing symbol sequence...')
     #smooth by hanning window that is 20% the time width of one bit
     hann1 = np.hanning(int(T_bit*0.2))
     #plt.plot(hann)
@@ -371,7 +368,6 @@ def ask_1bit(nbits,tbit,fc,Ebit,N0,fs=800e6,bias=0.71):
     sym_seq[:win_size] = sym_seq[win_size+1]
     sym_seq[-(win_size):] = sym_seq[-(win_size+1)]
 
-    print('Applying to carrier signal...')
     #apply carrier signal
     e_vec = np.exp(2.j*np.pi*fc*x*ts)
     #e_vec = np.exp(2.j*np.pi * fs/f_sim * x)

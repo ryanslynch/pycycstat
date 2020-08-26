@@ -194,7 +194,7 @@ if new_data:
 
 	bb = filtered_signals[0] + 1.j*filtered_signals[1]
 
-	print('Adding noise...')
+	#print('Adding noise...')
 
 	N0_dB = -10
 
@@ -250,65 +250,6 @@ print(s.shape)
 #plt.show()
 
 
-
-
-"""
-Data creation/loading done
-Everything after this point is applying SK
-"""
-
-
-
-
-print('Applying SK...')
-
-
-SK_timebins = Nint//m
-print('SK_timebins: {}'.format(SK_timebins))
-
-for i in range(SK_timebins):
-	s_chunk = s[:,i*m:(i+1)*m]
-	this_sk = SK_EST(s_chunk,n,m,d)
-	if i==0:
-		sk = this_sk
-		accum_p = np.average(s_chunk,axis=1)
-	else:
-		sk = np.c_[sk,this_sk]
-		accum_p = np.c_[accum_p,np.average(s_chunk,axis=1)]
-
-	
-
-
-
-
-np.save(scr_dir+'sk.npy',sk)
-#p: accumulated power (m spectra at a time)
-np.save(scr_dir+'p.npy',accum_p)
-
-print('Applying flags...')
-
-sigma = 3.0
-SK_p = (1-scipy.special.erf(sigma/math.sqrt(2))) / 2
-lt, ut = SK_thresholds(m, N = n, d = d, p = SK_p)
-print('Upper Threshold: '+str(ut))
-print('Lower Threshold: '+str(lt))
-
-accum_p[sk>ut] = 1e-3
-accum_p[sk<lt] = 1e-3
-
-np.save(scr_dir+'p_flagged.npy',accum_p)
-
-flags = np.zeros(accum_p.shape)
-flags[sk>ut] = 1
-flags[sk<lt] = 1
-np.save(scr_dir+'flags.npy',flags)
-
-tot_pts = flags.size
-count = np.float64(np.count_nonzero(flags))
-pct = 100*count/tot_pts
-print('Percentage of data flagged: {}'.format(pct))
-
-print('Program Done')
 
 
 
