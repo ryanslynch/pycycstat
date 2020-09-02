@@ -238,17 +238,17 @@ def bfsk_smoothed(nbits,tbit,f0,f1,Ebit=0.0,N0=None,fs=800e6):
 
     #apply carrier signal
     ts=1/fs
-    Ebit_linear = 10**(Ebit/10.0)
+    #Ebit_linear = 10**(Ebit/10.0)
     x = np.arange(nbits*tbit)
     arg = (2.j*np.pi*freq_seq*x*ts)
     sig = np.exp(arg)
     
-    sig *= np.sqrt(Ebit_linear)
+    #sig *= np.sqrt(Ebit_linear)
     
-    if N0 is not None:
-        sig += noise(sig,N0)
+    #if N0 is not None:
+    #    sig += noise(sig,N0)
 
-    return sig,sym_seq,smoothed
+    return sig#,sym_seq,smoothed
     
     
     
@@ -317,6 +317,64 @@ def ask_2bit(nbits,tbit,fc,Ebit=0.0,N0=None,fs=800e6,bias=0.5):
         sig += noise(sig,N0)
     
     return sig,sym_seq
+    
+    
+    
+    
+
+    
+def ask_1bit(nbits,tbit,fc,Ebit,N0,fs=800e6,bias=0.71):
+    """
+    Generate a rectangular pulse binary 1-bit/2-level amplitude shift keyed signal, with a hanning
+    smoothing kernel applied to the symbol sequence so that amplitude shifts are smooth.
+    
+    Parameters
+    ----------
+    nbits : int
+        Number of bits to generate.
+    tbit : int
+        Bit duration (seconds).  The bit rate is 1/tbit.
+    fc : float
+        Carrier frequency (Hz)
+    Ebit : float
+        Energy per bit (dB).
+    N0 : float
+        Noise power spectral density (dB).  If None, do not add noise.
+    fs : float
+        Sampling frequency of ADC (Hz)
+    bias : float
+        symbol bias, so that symbol=00 doesn't have 0 voltage
+
+    Returns
+    -------
+    sig : 1d array
+    An array of size nbit containing the complex rectangular pulse BPSK
+    signal.
+    """
+    x = np.arange(nbits*tbit)
+    bit_seq = np.random.randint(0,2,size=(int(len(x)/T_bit)+1,))+bias
+    pulse = np.ones(T_bit)
+    sym_seq = np.kron(bit_seq,pulse)[:len(x)]
+
+    #smooth by hanning window that is 20% the time width of one bit
+    hann1 = np.hanning(int(T_bit*0.2))
+    #plt.plot(hann)
+    sym_seq = np.convolve(sym_seq,hann1,mode='same')
+
+    sym_seq = sym_seq / np.max(sym_seq)
+
+    #take away smoothing at edges
+    win_size = int(T_bit*0.2)
+    sym_seq[:win_size] = sym_seq[win_size+1]
+    sym_seq[-(win_size):] = sym_seq[-(win_size+1)]
+
+    #apply carrier signal
+    e_vec = np.exp(2.j*np.pi*fc*x*ts)
+    #e_vec = np.exp(2.j*np.pi * fs/f_sim * x)
+    
+    sig = sym_seq * e_vec
+
+    return sig#,sym_seq,bit_seq
 
 
 
