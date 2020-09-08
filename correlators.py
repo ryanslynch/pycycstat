@@ -27,8 +27,6 @@ Conjugate estimators
 import numpy as np
 from collections import defaultdict
 from scipy.signal import convolve,stft,periodogram,get_window
-from numba import jit
-
 
 def cyclic_autocorr(x, nlags, cfs):
     """
@@ -443,7 +441,7 @@ def ssca(x, nchan, nhop, fsamp=1.0, window="hamming", psd=None,
     assert nhop & (nhop-1) == 0 and nhop != 0,"nhop must be a power of two"
     assert output in ["scf","coherence","both"],("%s it not a valid choice for "
                                                  "'output'"%output)
-    nstrip = npts/nhop
+    nstrip = npts//nhop
     if psd is None:
         fpsd,psd = periodogram(x)
         fpsd = np.fft.fftshift(fpsd)
@@ -478,9 +476,9 @@ def ssca(x, nchan, nhop, fsamp=1.0, window="hamming", psd=None,
 
     if output == "coherence" or "both":
         if conjugate:
-            S12 = psd[::npts/nchan,np.newaxis]*psd
+            S12 = psd[::npts//nchan,np.newaxis]*psd
         else:
-            S12 = psd[::npts/nchan,np.newaxis] * psd[::-1]
+            S12 = psd[::npts//nchan,np.newaxis] * psd[::-1]
         rho = scf/S12**0.5
 
     if output == "scf":

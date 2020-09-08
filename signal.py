@@ -311,7 +311,7 @@ def ask_2bit(nbits,tbit,fc,Ebit=0.0,N0=None,fs=800e6,bias=0.5):
     #apply carrier signal
     ts=1/fs
     Ebit_linear = 10**(Ebit/10.0)
-    e_vec = np.exp(2.j*np.pi*fc*x*ts)
+    e_vec = np.exp(2.j*np.pi*fc*np.arange(len(sym_seq))*ts)
     
     sig = sym_seq * e_vec
     sig *= np.sqrt(Ebit_linear)
@@ -355,24 +355,25 @@ def ask_1bit(nbits,tbit,fc,Ebit,N0=None,fs=800e6,bias=0.71):
     signal.
     """
     x = np.arange(nbits*tbit)
-    bit_seq = np.random.randint(0,2,size=(int(len(x)/T_bit)+1,))+bias
-    pulse = np.ones(T_bit)
+    bit_seq = np.random.randint(0,2,size=(int(len(x)/tbit)+1,))+bias
+    pulse = np.ones(tbit)
     sym_seq = np.kron(bit_seq,pulse)[:len(x)]
 
     #smooth by hanning window that is 20% the time width of one bit
-    hann1 = np.hanning(int(T_bit*0.2))
+    hann1 = np.hanning(int(tbit*0.2))
     #plt.plot(hann)
     sym_seq = np.convolve(sym_seq,hann1,mode='same')
 
     sym_seq = sym_seq / np.max(sym_seq)
 
     #take away smoothing at edges
-    win_size = int(T_bit*0.2)
+    win_size = int(tbit*0.2)
     sym_seq[:win_size] = sym_seq[win_size+1]
     sym_seq[-(win_size):] = sym_seq[-(win_size+1)]
 
     #apply carrier signal
-    e_vec = np.exp(2.j*np.pi*fc*x*ts)
+    ts = 1/fs
+    e_vec = np.exp(2.j*np.pi*fc*np.arange(len(sym_seq))*ts)
     #e_vec = np.exp(2.j*np.pi * fs/f_sim * x)
     
     sig = sym_seq * e_vec
