@@ -57,8 +57,8 @@ def rp_bpsk(nbits, tbit, fc, Ebit=0.0, N0=None):
     # Apply the carrier frequency
     Ebit_linear = 10**(Ebit/10.0)
     x = np.sqrt(Ebit_linear)*s*np.exp(2j*np.pi*fc*np.arange(len(s)))
-    if N0 is not None:
-        x += noise(x,N0)
+    #if N0 is not None:
+    #    x += noise(x,N0)
 
     return x
 
@@ -108,10 +108,10 @@ def qpsk(nbits,tbit,fc,Ebit=0.0,N0=None,fs=800e6):
     arg = 1.j*((2*np.pi*fc*x*ts) + (2*sym_seq-1)*(np.pi/4))
     sig = np.sqrt(Ebit_linear)*np.exp(arg)
     
-    if N0 is not None:
-        sig += noise(sig,N0)
+    #if N0 is not None:
+    #    sig += noise(sig,N0)
     
-    return sig,sym_seq
+    return sig#,sym_seq
     
     
 #===========================================
@@ -170,19 +170,19 @@ def bfsk(nbits,tbit,f0,f1,Ebit=0.0,N0=None,fs=800e6):
     phase = 0
     for i in range(nbits):
         if bit_seq[i] == 1:
-            arg = 1.j*((2*np.pi*fm*x[i*tbit:(i+1)*tbit]*ts)+phase)
+            arg = 1.j*((2*np.pi*f0*x[i*tbit:(i+1)*tbit]*ts)+phase)
             sig[i*T_bit:(i+1)*tbit] = np.exp(arg)
             phase += fm*ts*tbit
         else:
-            arg = 1.j*((2*np.pi*fs*x[i*tbit:(i+1)*tbit]*ts)+phase)
+            arg = 1.j*((2*np.pi*f1*x[i*tbit:(i+1)*tbit]*ts)+phase)
             sig[i*tbit:(i+1)*tbit] = np.exp(arg)
             phase += fm*ts*tbit
     sig *= np.sqrt(Ebit_linear)
     
-    if N0 is not None:
-        sig += noise(sig,N0)
+    #if N0 is not None:
+    #    sig += noise(sig,N0)
 
-    return sig,sym_seq
+    return sig#,sym_seq
 
 
 #binary freq-shift keying - switch between 2 freqs, with smoothing of symbol sequence
@@ -233,8 +233,8 @@ def bfsk_smoothed(nbits,tbit,f0,f1,Ebit=0.0,N0=None,fs=800e6):
     sym_seq = sym_seq/np.max(sym_seq)
     
     #create frequency sequence
-    f_diff = fm-fs
-    freq_seq = fs + (sym_seq)*f_diff
+    f_diff = f0-f1
+    freq_seq = f1 + (sym_seq)*f_diff
 
     #apply carrier signal
     ts=1/fs
@@ -313,17 +313,17 @@ def ask_2bit(nbits,tbit,fc,Ebit=0.0,N0=None,fs=800e6,bias=0.5):
     sig = sym_seq * e_vec
     sig *= np.sqrt(Ebit_linear)
     
-    if N0 is not None:
-        sig += noise(sig,N0)
+    #if N0 is not None:
+    #    sig += noise(sig,N0)
     
-    return sig,sym_seq
+    return sig#,sym_seq
     
     
     
     
 
     
-def ask_1bit(nbits,tbit,fc,Ebit,N0,fs=800e6,bias=0.71):
+def ask_1bit(nbits,tbit,fc,Ebit,N0=None,fs=800e6,bias=0.71):
     """
     Generate a rectangular pulse binary 1-bit/2-level amplitude shift keyed signal, with a hanning
     smoothing kernel applied to the symbol sequence so that amplitude shifts are smooth.
