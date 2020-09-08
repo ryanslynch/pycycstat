@@ -161,28 +161,31 @@ def bfsk(nbits,tbit,f0,f1,Ebit=0.0,N0=None,fs=800e6):
     
     ts=1/fs
     Ebit_linear = 10**(Ebit/10.0)
-    #apply to mark/space frequencies
-    #need to make sure phase doesn't change
-    #there is a vectorized way to do this im sure but im lazy
-    # also this doesn't work
-    sig = np.zeros(len(x),dtype=np.complex64)
-    x = np.arange(nbits*tbit)
+
+    #workflow: for each new bit,
+    # 1) set up argument for exponent
+    # 2) make the signal and apply it to the right range of sig array
+    # 3) increment the phase so that it's continuous across freq shifts
+    
+    ind = np.arange(tbit)
+
+    sig = np.zeros(nbits*tbit,dtype=np.complex64)
+    
     phase = 0
     for i in range(nbits):
         if bit_seq[i] == 1:
-            arg = 1.j*((2*np.pi*f0*x[i*tbit:(i+1)*tbit]*ts)+phase)
-            sig[i*T_bit:(i+1)*tbit] = np.exp(arg)
-            phase += fm*ts*tbit
-        else:
-            arg = 1.j*((2*np.pi*f1*x[i*tbit:(i+1)*tbit]*ts)+phase)
+            arg = (2j*np.pi*f0*ind*ts) + 1.j*phase
             sig[i*tbit:(i+1)*tbit] = np.exp(arg)
-            phase += fm*ts*tbit
+            phase += 2*np.pi*tbit*(f0*ts)
+        else:
+            arg = (2j*np.pi*f1*ind*ts) + 1.j*phase
+            sig[i*tbit:(i+1)*tbit] = np.exp(arg)
+            phase += 2*np.pi*tbit*(f1*ts)
+
     sig *= np.sqrt(Ebit_linear)
     
-    #if N0 is not None:
-    #    sig += noise(sig,N0)
 
-    return sig#,sym_seq
+    return sig
 
 
 #binary freq-shift keying - switch between 2 freqs, with smoothing of symbol sequence
