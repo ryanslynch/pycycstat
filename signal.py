@@ -92,7 +92,7 @@ def srrc_pulse(beta,span,tbit):
 
 
 
-def srrc_bpsk(nbits, tbit, fc, beta, Ebit=0.0, N0=None,fs=800e6):
+def srrc_bpsk(nbits, tbit, fc, beta, Ebit=0.0,fs=800e6):
     """
     Generate a rectangular pulse binary phase shift keyed signal.
 
@@ -103,11 +103,14 @@ def srrc_bpsk(nbits, tbit, fc, beta, Ebit=0.0, N0=None,fs=800e6):
     tbit : int
         Bit duration (seconds).  The bit rate is 1/tbit.
     fc : float
-        Carrier frequency (normalized units)
+        Carrier frequency (Hz).
+    beta : float
+        rollover factor for pulse shape. Between 0 and 1.
     Ebit : float
         Energy per bit (dB).
-    N0 : float
-        Noise power spectral density (dB).  If None, do not add noise.
+    fs : float
+        sampling frequency (Hz).
+
     
     Returns
     -------
@@ -117,11 +120,14 @@ def srrc_bpsk(nbits, tbit, fc, beta, Ebit=0.0, N0=None,fs=800e6):
 
     Examples
     --------
-    >> rp_bpsk(10000,10,0.05,Ebit=10,N0=-10)
+    >> rp_bpsk(10000,10,250e6,0.5,Ebit=10,N0=-10)
     array([ 3.27208358+0.58731289j,  5.98561690+2.07007302j,
         7.60758519+5.56195842j, ..., -3.73780915+5.00217463j,
         0.02360099+0.1760474j , -0.09160716+0.18982198j])
     """
+    ts = 1/fs
+    Ebit_linear = 10**(Ebit/10.0)
+    
     #create random bit/symbol seq
     bit_seq = np.random.randint(0,2,size=nbits)
     
@@ -130,17 +136,19 @@ def srrc_bpsk(nbits, tbit, fc, beta, Ebit=0.0, N0=None,fs=800e6):
     extend[0]=1
     sym_seq = np.kron(sym_seq,extend)
     
-    #make srrc pulse functions
-    betas = np.arange(0,1,0.1)
-    res = np.empty((10,len(sym_seq)))
+    #make srrc pulse function
+    pulse = srrc_pulse(beta,4000,4000)
     
-    for i in range(len(betas)):
-        pulse = srrc_pulse(betas[i],4000,4000)
-        x = lfilter(pulse, 1, sym_seq)
-        res[i,:] = x
+    
+    x = lfilter(pulse, 1, sym_seq)
+    
+    #apply to carrier frequency
+    arg = 2.j*np.pi*fc*ts*np.arange(len(x))
+    s = E_bit_linear*x*np.exp(arg)
 
 
-    return res
+
+    return s
 
 
 
