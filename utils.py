@@ -370,3 +370,44 @@ def plot_top_scf(fs, cfs, scf, n, coherence=None, magnitude=True,
         return None
     else:
         return (figure,ax)
+
+def flag_cs(x, nchan, nhop, fsamp, psd=None, fsm_window_size=256,
+            conjugate=False, threshold=3):
+
+    assert nchan in (32,64,128,256), "Unsupported value of nchan"
+    assert len(x) in (4096,8192,16384,32768), "Unsupported input array length"
+        
+    expected_params = {
+        (4096,32): (0.6934484348596286,0.010893650247280331),
+        (8192,32): (0.6929309406742655,0.007714571376986666),
+        (16384,32): (0.6924660061803586,0.005439735175162053),
+        (32768,32): (0.6920923851886733,0.0038472345545220955),
+        (4096,64): (0.6919309443620992,0.010893650247280331),
+        (8192,64): (0.6919665849625346,0.007714571376986666),
+        (16384,64): (0.6918328552571094,0.005439735175162053),
+        (32768,64): (0.6916647305961944,0.0038472345545220955),
+        (4096,128): (0.6899798235234413,0.010893650247280331),
+        (8192,128): (0.6908462516642049,0.007714571376986666),
+        (16384,128): (0.6911695554868199,0.005439735175162053),
+        (32768,128): (0.6912597239091195,0.0038472345545220955),
+        (4096,256): (0.6869570549645402,0.010893650247280331),
+        (8192,256): (0.689224759019894,0.007714571376986666),
+        (16384,256): (0.6902832207239482,0.005439735175162053),
+        (32768,256): (0.6907632985449913,0.0038472345545220955),
+        }
+
+    npts = len(x)
+    expected_amp = expected_params[(npts,nchan)][0]
+    expected_std = expected_params[(npts,nchan)][1]
+    x -= x.mean()
+    x /= x.std()
+    fs,cfs,scf = ssca(x,nchan,nhop,fsamp,window="hann",psd,fsm_window_size,
+                      conjugate,output="scf")
+    #scf *= np.sqrt(nchan/len(x)**3)
+    scf *= np.sqrt(nchan**3/len(x))
+    amp = np.sum(np.abs(scf))/len(scf.ravel())
+    if np.abs(amp-expected_amp)/expected_std > threshold
+        return True
+    else:
+        return False
+    
