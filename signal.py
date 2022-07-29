@@ -63,6 +63,97 @@ def rp_bpsk(nbits, tbit, fc, Ebit=0.0, N0=None):
     return x
 
 
+def srrc_pulse(beta,span,tbit):
+    #using p(t) from https://www.gaussianwaves.com/2018/10/square-root-raised-cosine-pulse-shaping/
+    x = np.arange(span)
+    b = beta
+    pi = np.pi
+    
+    #the function has discontinuities at x=0 and x = 10/(4*b) so
+    with np.errstate(divide='ignore'):
+        num = np.sin( (pi*x*(1-b))/(tbit) ) + ((4*b*(x))/(tbit))*np.cos( (pi*x*(1+b))/(tbit) )
+        den = ((pi*x)/(tbit)) * (1 - ( (4*b*x)/(tbit))**2 )
+
+        pulse = (1/np.sqrt(tbit)) * (num/den)
+    
+    #handle discontinuities
+    pulse[0] = (1/np.sqrt(tbit))*((1-b)+(4*b/pi))
+    
+    if (b != 0):
+        if ((tbit/(4*b)) == int(tbit/(4*b))) and ((tbit/(4*b)) <= span):
+            print(b)
+            print(int(tbit/(4*b)))
+            pulse[int(tbit/(4*b))] = ((b)/(np.sqrt(2*tbit))) * ( (1+2/pi)*np.sin(pi/(4*b)) + (1-2/pi)*np.cos(pi/(4*b)) )
+    
+    pulse = np.roll(pulse,len(pulse)//2)
+    pulse[:len(pulse)//2] = np.flip(pulse[len(pulse)//2:])
+    
+    return pulse
+
+
+
+def srrc_bpsk(nbits, tbit, fc, beta, Ebit=0.0,fs=800e6):
+    """
+    Generate a rectangular pulse binary phase shift keyed signal.
+
+    Parameters
+    ----------
+    nbits : int
+        Number of bits to generate.
+    tbit : int
+        Bit duration (seconds).  The bit rate is 1/tbit.
+    fc : float
+        Carrier frequency (Hz).
+    beta : float
+        rollover factor for pulse shape. Between 0 and 1.
+    Ebit : float
+        Energy per bit (dB).
+    fs : float
+        sampling frequency (Hz).
+
+    
+    Returns
+    -------
+    out : ndarray
+       An array of size nbit containing the complex rectangular pulse BPSK
+       signal.
+
+    Examples
+    --------
+    >> rp_bpsk(10000,10,250e6,0.5,Ebit=10,N0=-10)
+    array([ 3.27208358+0.58731289j,  5.98561690+2.07007302j,
+        7.60758519+5.56195842j, ..., -3.73780915+5.00217463j,
+        0.02360099+0.1760474j , -0.09160716+0.18982198j])
+    """
+    ts = 1/fs
+    Ebit_linear = 10**(Ebit/10.0)
+    
+    #create random bit/symbol seq
+    bit_seq = np.random.randint(0,2,size=nbits)
+    
+    sym_seq = 2*bit_seq-1
+    extend = np.zeros(tbit)
+    extend[0]=1
+    sym_seq = np.kron(sym_seq,extend)
+    
+    #make srrc pulse function
+    pulse = srrc_pulse(beta,4000,4000)
+    
+    
+    x = lfilter(pulse, 1, sym_seq)
+    
+    #apply to carrier frequency
+    arg = 2.j*np.pi*fc*ts*np.arange(len(x))
+    s = E_bit_linear*x*np.exp(arg)
+
+
+
+    return s
+
+
+
+
+
 
 #quadrature phase shift keying
 #same as binary phase shift, but information encoded is 2-bit, leading to 4 phases (45deg,135,225,315)
