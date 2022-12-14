@@ -5,9 +5,9 @@ Cyclostationary correlation functions
 
 Non-conjugate estimators
 ------------------------
-   cyclic_autocorr        Symmetric non-conjugate cyclic autocorrelation 
+   caf        Symmetric non-conjugate cyclic autocorrelation 
                           function
-   spectral_corr          Non-conjugate spectral correlation function
+   scf          Non-conjugate spectral correlation function
    fsm_scf_estimate       Frequency-smoothing method of non-cojugate
                           spectral correlation function estimation
    tsm_scf_estimate       Time-smoothing method of non-conjugate
@@ -24,16 +24,16 @@ Conjugate estimators
    tsm_conj_scf_estimate  Time-smoothing method of conjugate 
                           spectral correlation function estimation
 """
+import sys
+import warnings
 import numpy as np
 from collections import defaultdict
 from scipy.signal import convolve,stft,periodogram,get_window
 
-def cyclic_autocorr(x, nlags, cfs):
+def caf(x, nlags, cfs, conjugate=False):
     """
     Compute the cyclic autocorrelation (CAF) function at the given 
-    cycle frequencies, defined as 
-    R_a(k) = 1/N * sum_n(x[n+k] * conj(x[n]) * exp(-2j*pi*a*n)) 
-    for lag k and cycle frequency a.
+    cycle frequencies.
 
     Parameters
     ----------
@@ -43,89 +43,39 @@ def cyclic_autocorr(x, nlags, cfs):
        The number of lags to use in the autocorrelation.
     cfs : ndarray
        The cycle frequencies at which to compute the CAF.
+    conjugate : {bool}
+       If True, return the conjugate CAF
 
     Returns
     -------
     out : ndarray
-       An array of shape (len(cfs),nlags) containing the complex-valued
-       cyclic autocorrelatioin coefficiencts.
+       An array of shape (len(cfs),nlags) containing the
+       complex-valued cyclic autocorrelatioin coefficiencts.
 
     Notes
     -----
-       The symmetric autocorrelation is used, so that the lag values 
-       range from -nlags/2 to nlags2/.
-
-    Examples
-    --------
-
+    The CAF is defined as 
+    R_a(k) = 1/N * sum_n(x[n+k] * conj(x[n]) * exp(-2j*pi*a*n)) 
+    for lag k and cycle frequency a.  The conjugate CAF is 
+    defined as 
+    R*_a(k) = 1/N * sum_n(x[n+k] * x[n] * exp(-2j*pi*a*n)) 
+    In both cases, the symmetric autocorrelation is used, so 
+    that the lag values range from -nlags/2 to nlags2/.
     """
     assert nlags <= len(x), "nlags must be <= len(x)"
     assert len(cfs) <= len(x), "len(cfs) must be <= len(x)"
 
-    ts = np.arange(len(x))
-    N = len(x)
+    ts = np.arange(len(x))[None,None,]
     lags = np.arange(-nlags//2, nlags//2)
-
-    caf = np.empty((len(cfs),len(lags)),dtype=np.complex)
-    for tt,lag in enumerate(lags):
-        x1 = np.roll(x,lag)
-        x2 = x.conjugate()
-        for aa,cf in enumerate(cfs):
-            caf[aa,tt] = np.mean(x1*x2*np.exp(-2j*np.pi*cf*ts))
+    x1 = np.array([np.roll(x,lag) for lag in lags])[None,]
+    x2 = np.tile(x,nlags).reshape(nlags,len(x))[None,]
+    if conjugate: x2 = x2.conjugate()
+    caf = np.mean(
+        x1*x2.conjugate()*np.exp(-2j*np.pi*cfs[:,None,None]*ts),axis=-1)
 
     return caf
 
-
-def conj_cyclic_autocorr(x, nlags, cfs):
-    """
-    Compute the conjugate cyclic autocorrelation function, at the 
-    given cycle frequencies, defined as 
-    R*_a(k) = 1/N * sum_n(x[n+k] * x[n] * exp(-2j*pi*a*n))
-    for lag k and cycle frequency a.  This is similar to the cyclic
-    autocorrelation function except that the lagged signal
-    is not multiplied by its conjugate as in the normal 
-    autocorrelation function.
-
-    Parameters
-    ----------
-    x : ndarray
-       Input sequence.
-    nlags : int
-       The number of lags to use in the autocorrelation.
-    cfs : ndarray
-       The cycle frequencies at which to compute the CAF.
-
-    Returns
-    -------
-    out : ndarray
-       An array of shape (len(cfs),nlags) containing the complex-valued
-       conjugate cyclic autocorrelatioin coefficiencts.
-
-    Notes
-    -----
-       The symmetric autocorrelation is used, so that the lag values 
-       range from -nlags/2 to nlags2/.
-
-    Examples
-    --------
-    """
-    assert nlags <= len(x), "nlags must be <= len(x)"
-    assert len(cfs) <= len(x), "len(cfs) must be <= len(x)"
-
-    ts =np.arange(len(x))
-    N = len(x)
-    lags = np.arange(-nlags//2, nlags//2)
-
-    ccaf = np.empty((len(cfs),len(lags)), dtype=np.complex)
-    for tt,lag in enumerate(lags):
-        x1 = np.roll(x,lag)
-        for aa,cf in enumerate(cfs):
-            ccaf[aa,tt] = np.mean(x1*x*np.exp(-2j*np.pi*cf*ts))
-
-    return ccaf
-
-
-def spectral_corr(x, window_size, cfs):
+def scf(x, window_size, cfs, conjugate=False):
     """
     Compute the spectral correlation function (SCF) at the given 
     cycle frequencies, defined as
@@ -158,124 +108,18 @@ def spectral_corr(x, window_size, cfs):
     Examples
     --------
     """
-    assert len(x) >= 2*window_size, "window_size must be <= 0.5*len(x)"
     ts = np.arange(len(x))
-    X1 = np.empty((len(x),window_size), dtype=np.complex)
-    X2 = np.empty((len(x),window_size), dtype=np.complex)
-    scf = np.empty((len(cfs),window_size), dtype=np.complex)
+    x1 = x*np.exp(2j*np.pi*0.5*cfs[:,None]*ts)
+    x2 = x*np.exp(-2j*np.pi*0.5*cfs[:,None]*ts)
+    _,_,X1 = stft(x1,window="boxcar",nperseg=window_size)
+    _,_,X2 = stft(x2,window="boxcar",nperseg=window_size)
+    if not conjugate: X2 = X2.conjugate()
 
-    for aa,cf in enumerate(cfs):
-        x1 = x*np.exp(2j*np.pi*0.5*cf*ts)
-        x2 = x*np.exp(-2j*np.pi*0.5*cf*ts)
-        for tt in range(len(x)-window_size):
-            X1[tt] = np.fft.fft(x1[tt:tt+window_size])
-            X2[tt] = np.fft.fft(x2[tt:tt+window_size])
-        scf[aa] = np.fft.fftshift(
-            1.0/window_size*np.mean(X1*X2.conjugate(),axis=0))
-
+    scf = np.fft.fftshift(np.mean(X1*X2,axis=-1)*window_size,axes=-1)
+        
     return scf
 
-def spectral_corr_stft(x, window_size, cfs):
-    """
-    Compute the spectral correlation function (SCF) at the given 
-    cycle frequencies, defined as
-    S_a(f) = 1/N * sum_n(1/T * X[n,f-a/2] * conj(X[n,f-a/2]))
-    for cycle frequency a, where X is the sliding-window Fourier
-    tranform of the input time series x, and f is the Fourier
-    frequency.
 
-    Parameters
-    ----------
-    x : ndarray
-       Input sequence.
-    window_size : int
-       The number of points used in the sliding-window Fourier 
-       transform of x.
-    cfs : ndarray
-       The cycle frequencies at which to compute the SCF.
-
-    Returns
-    -------
-    out : ndarray
-       An array of shape (len(cfs),window_size) containing the 
-       complex-valued spectral correlation coefficients.
-
-    Notes
-    -----
-       The Fourier transform frequencies are shifted so that the
-       zero-frequency component is at the center of the spectrum.
-
-    Examples
-    --------
-    """
-    tolerance = 1e-5
-    nfft = window_size
-    while max(0.5*cfs*nfft%1) > tolerance: nfft += 2
-    scf = np.empty((len(cfs),nfft), dtype=np.complex)
-
-    fs,ts,X = stft(x,window="boxcar",nperseg=window_size,nfft=nfft)
-
-    for aa,cf in enumerate(cfs):
-        a1 = np.argmin(np.abs(fs-0.5*cf))
-        a2 = np.argmin(np.abs(fs+0.5*cf))
-        X1 = np.roll(X,a1,axis=0)
-        X2 = np.roll(X,a2,axis=0)
-        scf[aa] = np.mean(X1*X2.conjugate(),axis=-1)*window_size
-        
-    return fs,scf
-
-
-def conj_spectral_corr(x, window_size, cfs):
-    """
-    Compute the conjugate spectral correlation function (CSCF) at 
-    the given  cycle frequencies, defined as
-    S_a(f) = 1/N * sum_n(1/T * X[n,f-a/2] * X[n,f-a/2])
-    for cycle frequency a, where X is the sliding-window Fourier
-    tranform of the input time series x, and f is the Fourier
-    frequency.  This is similar to the spectral correlation function 
-    except that the Fourier transformed signal is not multiplied by its 
-    conjugate as in the normal autocorrelation function.
-
-
-    Parameters
-    ----------
-    x : ndarray
-       Input sequence.
-    window_size : int
-       The number of points used in the sliding-window Fourier 
-       transform of x.
-    cfs : ndarray
-       The cycle frequencies at which to compute the SCF.
-
-    Returns
-    -------
-    out : ndarray
-       An array of shape (len(cfs),window_size) containing the 
-       complex-valued conjugate spectral correlation coefficients.
-
-    Notes
-    -----
-       The Fourier transform frequencies are shifted so that the
-       zero-frequency component is at the center of the spectrum.
-
-    Examples
-    --------
-    """
-    assert len(x) >= 2*window_size, "window_size must be <= 0.5*len(x)"
-    ts = np.arange(len(x))
-    X1 = np.empty((len(x),window_size), dtype=np.complex)
-    X2 = np.empty((len(x),window_size), dtype=np.complex)
-    cscf = np.empty((len(cfs),window_size), dtype=np.complex)
-
-    for aa,cf in enumerate(cfs):
-        x1 = x*np.exp(2j*np.pi*0.5*cf*ts)
-        x2 = np.conjugate(x*np.exp(-2j*np.pi*0.5*cf*ts))
-        for tt in range(len(x)-window_size):
-            X1[tt] = np.fft.fft(x1[tt:tt+window_size])
-            X2[tt] = np.fft.fft(x2[tt:tt+window_size])
-        cscf[aa] = np.fft.fftshift(1.0/window_size*np.mean(X1*X2,axis=0))
-
-    return cscf
 
 
 def fsm_scf_estimate(x, kernel, cfs, mode="same"):
@@ -443,6 +287,7 @@ def ssca(x, nchan, nhop, fsamp=1.0, window="hamming", psd=None,
                                                  "'output'"%output)
     nstrip = npts//nhop
     if psd is None:
+        if fsm_window_size > len(x): fsm_window_size = len(x)
         fpsd,psd = periodogram(x)
         fpsd = np.fft.fftshift(fpsd)
         psd = np.fft.fftshift(psd)
@@ -451,7 +296,7 @@ def ssca(x, nchan, nhop, fsamp=1.0, window="hamming", psd=None,
     fk,t,X = stft(x,fs=fsamp,window=window,nperseg=nchan,noverlap=nchan-nhop)
     fk = np.fft.fftshift(fk)
     # TODO: Normalization
-    if type(window) == str:
+    if type(window) in (str,tuple):
         win = get_window(window,nchan)
     else:
         win = window.copy()
@@ -466,7 +311,7 @@ def ssca(x, nchan, nhop, fsamp=1.0, window="hamming", psd=None,
         scf = np.fft.fft(np.repeat(X,nhop,axis=1)*x,axis=1)
     else:
         scf = np.fft.fft(np.repeat(X,nhop,axis=1)*x.conjugate(),axis=1)/nchan/np.pi
-    fq = np.fft.fftshift(np.fft.fftfreq(npts))    
+    fq = np.fft.fftshift(np.fft.fftfreq(npts,1/fsamp))    
     # Map fk,fq to f,alpha.  This algorithm was provided by user "Ethan" on
     # stackoverflow
     # https://stackoverflow.com/questions/61104413/optimizing-an-array-mapping-operation-in-python
@@ -598,3 +443,260 @@ def ssca_old(x, nchan, nhop, fsamp=1.0, window="hamming", psd=None,
                     ret[alpha]["rho"] = np.concatenate(
                         (ret[alpha]["rho"],[Sx[kk,qq]/(S1*S2)**0.5]))
     return ret
+
+
+def ssca_cu(x, nchan, nhop, fsamp=1.0, window="hamming", psd=None,
+            fsm_window_size=256, conjugate=False, output="scf"):
+    """
+    Calculate the spectral correlation function or coherence using the
+    strip spectrum correlation analyzer with CUDA acceleration.
+
+    Parameters
+    ---------
+    x : ndarray
+       Input sequence.
+    nchan : int
+       Number of points to use in the channelizer short time Fourier
+       transform.  This must be a power-of-two.
+    nhop : int
+       Number of points to hop between segments in the channelizer STFT.
+       The overlap between segments is nchan-nhop.  This must be a
+       power-of-two.  A value of nchan/4 is recommended.
+    fs : {float}
+       Sampling frequency of the input data.
+    window : {str or tuple or array_like}
+       The windowing function to use in the channelizer STFT.  If a string
+       or a tuple is given it will be passed to scipy.signal.get_window and
+       must be a valid input to that function.  If an array_like object
+       is given it will be used directly as the window.  See
+       scipy.signal.windows for more information on valid windows.
+    psd : {ndarray}
+       Side estimate of the power spectral density of X to use when
+       calculating the coherence.  If None, the frequency smoothing method
+       will be used to generate a PSD estimate of the same size as x.  If
+       output is 'scf' this has no effect.
+    fsm_window_size : {int}
+       The size of the smoothing window to use when generating the
+       frequency-smoothed PSD.  If psd is given or output is 'scf'
+       this has no effect.
+    conjugate : {bool}
+       If True, return the conjugate SCF or coherence.  Otherwise, return
+       the non-conjugate SCF or coherence.
+    output : {str}
+       If 'scf', return the spectral correlation function.  If 'coherence',
+       return the spectral coherence function.  If 'both', return
+       the both the SCF and coherence.
+
+    Returns
+    -------
+    f : ndarray
+       The spectral frequencies
+    alpha : ndarray
+       The cycle frequencies
+    scf : ndarray
+       The spectral correlation function.  Omitted if output=="coherence"
+    rho : ndarray
+       The spectral coherence.  Omitted if output=="scf"
+
+    Notes
+    -----
+    The strip spectrum correlation analyzer is an efficient method for
+    calculating the spectral correlation function over the cyclic bi-plane of
+    baseband frequency (f) vs cycle frequency (alpha).  This is accomplished
+    by first channelizing the input data using a short time Fourier transform,
+    correlating each segment with the input data, Fourier transforming the
+    correlation product, and then mapping the output to the f-alpha bi-plane.
+    The result will have a frequency resolution of fsamp/nchan and a cycle
+    frequency resolution of fsamp/len(x).  If the spectral coherence is
+    desired, the SCF is normalized at each point by the power spectral density
+    at f+alpha/2 and f-alpha/2.
+    """
+    try:
+        import cupy as cp
+    except ImportError:
+        print("Error: Can't import cupy")
+        sys.exit()
+    try:
+        import cusignal
+    except ImportError:
+        print("Error: Can't import cusignal")
+        sys.exit()
+    warnings.filterwarnings("ignore")
+
+    x = cp.array(x)
+    npts = len(x)
+    assert npts & (npts-1) == 0 and npts != 0,"len(x) must be a power of two"
+    assert nchan & (nchan-1) == 0 and nchan != 0,"nchan must be a power of two"
+    assert nhop & (nhop-1) == 0 and nhop != 0,"nhop must be a power of two"
+    assert output in ["scf","coherence","both"],("%s it not a valid choice for "
+                                                 "'output'"%output)
+    nstrip = npts//nhop
+    if psd is None:
+        if fsm_window_size > len(x): fsm_window_size = len(x)
+        fpsd,psd = cusignal.periodogram(x)
+        fpsd = cp.fft.fftshift(fpsd)
+        psd = cp.fft.fftshift(psd)
+        psd = cp.convolve(1.0*cp.ones(fsm_window_size)/fsm_window_size,psd,mode="same")
+
+    fk,t,X = cusignal.stft(x,fs=fsamp,window=window,nperseg=nchan,noverlap=nchan-nhop)
+    fk = cp.fft.fftshift(fk)
+    # TODO: Normalization
+    if type(window) == str:
+        win = cusignal.get_window(window,nchan)
+    else:
+        win = window.copy()
+    X = X[:,1:]
+    
+    X *= cp.exp(-2j*cp.pi*cp.arange(nstrip)*cp.arange(nchan)[:,None]*nhop/nchan)
+    if conjugate:
+        scf = cp.fft.fft(cp.repeat(X,nhop,axis=1)*x,axis=1)
+    else:
+        scf = cp.fft.fft(cp.repeat(X,nhop,axis=1)*x.conj(),axis=1)/nchan/cp.pi
+    fq = cp.fft.fftshift(cp.fft.fftfreq(npts,1/fsamp))
+    # Map fk,fq to f,alpha.  This algorithm was provided by user "Ethan" on
+    # stackoverflow
+    # https://stackoverflow.com/questions/61104413/optimizing-an-array-mapping-operation-in-python
+    f = 0.5*(fk[:,cp.newaxis] - fq)
+    alpha = fk[:,cp.newaxis] + fq
+    scf = cp.fft.fftshift(scf)
+
+    if output == "coherence" or "both":
+        if conjugate:
+            S12 = psd[::npts//nchan,cp.newaxis]*psd
+        else:
+            S12 = psd[::npts//nchan,cp.newaxis] * psd[::-1]
+        rho = scf/S12**0.5
+        
+    if output == "scf":
+        return (f,alpha,scf)
+    elif output == "coherence":
+        return (f, alpha, rho)
+    else:
+        return (f, alpha, scf, rho)
+
+def ssca_cu2(x, nhop, fsamp=1.0, window="hamming", psd=None,
+            fsm_window_size=256, conjugate=False, output="scf"):
+    """
+    Calculate the spectral correlation function or coherence using the
+    strip spectrum correlation analyzer with CUDA acceleration.
+
+    Parameters
+    ---------
+    x : ndarray
+       Input sequence.
+    nchan : int
+       Number of points to use in the channelizer short time Fourier
+       transform.  This must be a power-of-two.
+    nhop : int
+       Number of points to hop between segments in the channelizer STFT.
+       The overlap between segments is nchan-nhop.  This must be a
+       power-of-two.  A value of nchan/4 is recommended.
+    fs : {float}
+       Sampling frequency of the input data.
+    window : {str or tuple or array_like}
+       The windowing function to use in the channelizer STFT.  If a string
+       or a tuple is given it will be passed to scipy.signal.get_window and
+       must be a valid input to that function.  If an array_like object
+       is given it will be used directly as the window.  See
+       scipy.signal.windows for more information on valid windows.
+    psd : {ndarray}
+       Side estimate of the power spectral density of X to use when
+       calculating the coherence.  If None, the frequency smoothing method
+       will be used to generate a PSD estimate of the same size as x.  If
+       output is 'scf' this has no effect.
+    fsm_window_size : {int}
+       The size of the smoothing window to use when generating the
+       frequency-smoothed PSD.  If psd is given or output is 'scf'
+       this has no effect.
+    conjugate : {bool}
+       If True, return the conjugate SCF or coherence.  Otherwise, return
+       the non-conjugate SCF or coherence.
+    output : {str}
+       If 'scf', return the spectral correlation function.  If 'coherence',
+       return the spectral coherence function.  If 'both', return
+       the both the SCF and coherence.
+
+    Returns
+    -------
+    f : ndarray
+       The spectral frequencies
+    alpha : ndarray
+       The cycle frequencies
+    scf : ndarray
+       The spectral correlation function.  Omitted if output=="coherence"
+    rho : ndarray
+       The spectral coherence.  Omitted if output=="scf"
+
+    Notes
+    -----
+    The strip spectrum correlation analyzer is an efficient method for
+    calculating the spectral correlation function over the cyclic bi-plane of
+    baseband frequency (f) vs cycle frequency (alpha).  This is accomplished
+    by first channelizing the input data using a short time Fourier transform,
+    correlating each segment with the input data, Fourier transforming the
+    correlation product, and then mapping the output to the f-alpha bi-plane.
+    The result will have a frequency resolution of fsamp/nchan and a cycle
+    frequency resolution of fsamp/len(x).  If the spectral coherence is
+    desired, the SCF is normalized at each point by the power spectral density
+    at f+alpha/2 and f-alpha/2.
+    """
+    try:
+        import cupy as cp
+    except ImportError:
+        print("Error: Can't import cupy")
+        sys.exit()
+    try:
+        import cusignal
+    except ImportError:
+        print("Error: Can't import cusignal")
+        sys.exit()
+    warnings.filterwarnings("ignore")
+
+    X = cp.array(x)
+    nchan = X.shape[0]
+    npts = X.shape[1]*nhop
+    assert npts & (npts-1) == 0 and npts != 0,"len(x) must be a power of two"
+    assert nchan & (nchan-1) == 0 and nchan != 0,"nchan must be a power of two"
+    assert nhop & (nhop-1) == 0 and nhop != 0,"nhop must be a power of two"
+    assert output in ["scf","coherence","both"],("%s it not a valid choice for "
+                                                 "'output'"%output)
+    nstrip = npts//nhop
+    if psd is None:
+        psd = np.sum(np.abs(X)**2,axis=1)
+
+    fk = cp.fft.rfftfreq(2*nchan)
+    fk = cp.fft.fftshift(fk)
+    # TODO: Normalization
+    if type(window) == str:
+        win = cusignal.get_window(window,nchan)
+    else:
+        win = window.copy()
+    
+    #X *= cp.exp(-2j*cp.pi*cp.arange(nstrip)*cp.arange(nchan)[:,None]*nhop/nchan)
+    if conjugate:
+        #scf = cp.fft.fft(cp.repeat(X,nhop,axis=1)*X.mean(axis=0),axis=1)
+        scf = cp.fft.fft(X*X.mean(axis=0),axis=1)
+    else:
+        #scf = cp.fft.fft(cp.repeat(X,nhop,axis=1)*X.mean(axis=0).conj(),axis=1)/nchan/cp.pi
+        scf = cp.fft.fft(X*X.mean(axis=0).conj(),axis=1)/nchan/cp.pi
+    fq = cp.fft.fftshift(cp.fft.fftfreq(npts))
+    # Map fk,fq to f,alpha.  This algorithm was provided by user "Ethan" on
+    # stackoverflow
+    # https://stackoverflow.com/questions/61104413/optimizing-an-array-mapping-operation-in-python
+    f = 0.5*(fk[:,cp.newaxis] - fq)
+    alpha = fk[:,cp.newaxis] + fq
+    scf = cp.fft.fftshift(scf)
+
+    if output == "coherence" or "both":
+        if conjugate:
+            S12 = psd[::npts//nchan,cp.newaxis]*psd
+        else:
+            S12 = psd[::npts//nchan,cp.newaxis] * psd[::-1]
+        rho = scf/S12**0.5
+        
+    if output == "scf":
+        return (f,alpha,scf)
+    elif output == "coherence":
+        return (f, alpha, rho)
+    else:
+        return (f, alpha, scf, rho)
